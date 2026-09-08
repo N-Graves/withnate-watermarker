@@ -1,5 +1,5 @@
 withnate-watermarker v0.1.0
-js   17360 bytes
+js   23958 bytes
 css  2344 bytes
 
 Drop both into the site's assets directory and reference them from the
