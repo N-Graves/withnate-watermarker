@@ -68,8 +68,12 @@ export const markFromText = (text: string, fontStack: string): HTMLCanvasElement
   const measure = canvas2d(8, 8);
   measure.font = `bold ${SIZE}px ${fontStack}`;
   const m = measure.measureText(text);
-  // Actual ascent and descent rather than the em box, so a mark of "WITH NATE"
-  // is not padded out by the space a lowercase g would have taken.
+  // Actual ascent and descent rather than the em box, so an all-caps mark is
+  // not padded out by the space a lowercase g would have taken.
+  //
+  // The mark is always the visitor's own - text they type, or a logo they
+  // upload. Nothing is bundled with this tool and there is no preset list, so
+  // no brand's mark can be applied to somebody else's work through it.
   const ascent = m.actualBoundingBoxAscent || SIZE * 0.8;
   const descent = m.actualBoundingBoxDescent || SIZE * 0.2;
   const w = Math.max(1, Math.ceil(m.width));
