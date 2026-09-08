@@ -1,0 +1,127 @@
+/*
+ * Watermarker styles. Namespaced .wm- so this drops into the site without
+ * touching anything already there, and deliberately does not define .btn,
+ * .glass, .sw or .vh - those belong to the site's stylesheet.
+ */
+
+.wm-intake {
+  border: 2px dashed var(--line, rgba(51, 23, 11, 0.22));
+  border-radius: 16px;
+  padding: clamp(1.25rem, 5vw, 2.25rem);
+  text-align: center;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.wm-intake.is-dragging {
+  border-color: var(--accent, #832305);
+  background: var(--surface-2, #f6ead8);
+}
+
+.wm-error:empty {
+  display: none;
+}
+
+.wm-error {
+  margin: 0.9rem 0 0;
+  padding: 0.7rem 0.9rem;
+  border-radius: 10px;
+  border: 1px solid var(--accent, #832305);
+  color: var(--accent, #832305);
+  font-size: 0.92rem;
+}
+
+.wm-controls {
+  display: grid;
+  gap: 1.1rem;
+  margin: 1.5rem 0 0;
+  padding: 1.1rem 1.25rem;
+  border: 1px solid var(--line, rgba(51, 23, 11, 0.14));
+  border-radius: 16px;
+  background: var(--surface-2, #f6ead8);
+}
+
+.wm-field {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.wm-label {
+  font-family: var(--f-hud, ui-monospace, monospace);
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-faint, #7d5a46);
+}
+
+.wm-field input[type="text"],
+.wm-field select {
+  padding: 0.5rem 0.6rem;
+  border-radius: 10px;
+  border: 1px solid var(--line, rgba(51, 23, 11, 0.2));
+  background: var(--surface, #fbf4e9);
+  color: inherit;
+  font: inherit;
+  width: 100%;
+}
+
+.wm-field input[type="range"] {
+  width: 100%;
+}
+
+.wm-styles {
+  display: flex;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+
+.wm-row {
+  display: grid;
+  gap: 1.1rem;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+}
+
+.wm-preview {
+  margin: 1.5rem 0 0;
+}
+
+.wm-preview:empty {
+  display: none;
+}
+
+/* A watermark is judged by looking at it, so the preview is the real output
+   scaled down rather than a re-render at display size. */
+.wm-preview-img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  border-radius: 12px;
+  border: 1px solid var(--line, rgba(51, 23, 11, 0.14));
+}
+
+.wm-actions {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin: 1rem 0 0;
+}
+
+.wm-note {
+  color: var(--text-dim, #6b4230);
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+.wm-caveat {
+  margin: 1.5rem 0 0;
+  padding-left: 0.9rem;
+  border-left: 3px solid var(--line, rgba(51, 23, 11, 0.2));
+  color: var(--text-dim, #6b4230);
+  font-size: 0.9rem;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wm-intake {
+    transition: none;
+  }
+}
