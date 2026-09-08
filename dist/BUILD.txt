@@ -1,0 +1,8 @@
+withnate-watermarker v0.1.0
+js   17360 bytes
+css  2344 bytes
+
+Drop both into the site's assets directory and reference them from the
+page. The script is a plain IIFE - no module, no defer requirement beyond
+the site's own convention. It does nothing unless the page contains an
+element with a data-pfc attribute.

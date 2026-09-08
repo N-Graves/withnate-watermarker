@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en-GB">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Watermarker — demo</title>
+    <!--
+      Development harness AND the integration contract. The markup inside
+      [data-wm] is what the site's page module needs to emit.
+      demo.css only stands in for the site's own classes; it is not shipped.
+    -->
+    <link rel="stylesheet" href="demo.css" />
+    <link rel="stylesheet" href="../dist/watermarker.css" />
+  </head>
+  <body>
+    <main class="wrap">
+      <p class="eyebrow">Free tool</p>
+      <h1>Watermark your work before you post it</h1>
+      <p class="lede">
+        Add your name across your artwork — one large mark, or tiled so a crop cannot remove it.
+        It happens on your own device; the picture is never uploaded.
+      </p>
+
+      <div data-wm class="wm">
+        <div data-wm-intake class="wm-intake">
+          <label class="btn" for="wm-file">Choose your artwork</label>
+          <input
+            id="wm-file"
+            type="file"
+            accept="image/png,image/jpeg,image/gif,image/webp"
+            class="vh"
+          />
+          <p class="wm-note">…or drop it here, or paste from the clipboard.</p>
+        </div>
+
+        <p data-wm-error class="wm-error" role="status"></p>
+
+        <div data-wm-controls class="wm-controls" hidden>
+          <div class="wm-field">
+            <label class="wm-label" for="wm-text">Watermark text</label>
+            <input id="wm-text" data-wm-text type="text" maxlength="60" />
+          </div>
+
+          <div class="wm-row">
+            <div class="wm-field">
+              <label class="wm-label" for="wm-font">Font</label>
+              <select id="wm-font" data-wm-font></select>
+            </div>
+            <div class="wm-field">
+              <label class="wm-label" for="wm-mark">…or use a logo instead</label>
+              <input id="wm-mark" data-wm-mark type="file" accept="image/png,image/webp" />
+            </div>
+          </div>
+
+          <div class="wm-field">
+            <span class="wm-label">Style</span>
+            <div class="wm-styles">
+              <button type="button" class="sw" data-wm-style="tiled" aria-pressed="true">
+                Tiled
+              </button>
+              <button type="button" class="sw" data-wm-style="central" aria-pressed="false">
+                One large mark
+              </button>
+            </div>
+          </div>
+
+          <div class="wm-field">
+            <label class="wm-label" for="wm-opacity">Strength</label>
+            <input id="wm-opacity" data-wm-opacity type="range" min="5" max="60" value="15" />
+          </div>
+        </div>
+
+        <div data-wm-preview class="wm-preview"></div>
+
+        <div class="wm-actions">
+          <a data-wm-download class="btn" hidden download>Download the marked copy</a>
+          <span data-wm-count class="wm-note"></span>
+        </div>
+
+        <p class="wm-caveat">
+          Worth being straight about what this buys you: a watermark deters casual
+          right-click-and-repost, and it does not stop anyone determined — modern software
+          removes them. Turned down far enough it also stops surviving a screenshot or a
+          re-encode, which makes it decoration rather than protection.
+        </p>
+      </div>
+
+      <noscript>
+        <p class="wm-note">
+          This needs JavaScript, because the whole point is that your artwork is marked here on
+          your machine rather than being sent anywhere.
+        </p>
+      </noscript>
+    </main>
+
+    <script src="../dist/watermarker.js" defer></script>
+  </body>
+</html>
