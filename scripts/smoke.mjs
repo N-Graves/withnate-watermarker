@@ -46,6 +46,10 @@ console.log("silent bail");
 const calls = [];
 const sandbox = {
   console,
+  // A standard global in every browser the site supports, and the core builds
+  // one at module scope to decode Exif strings. Omitting it made this check
+  // fail for a reason no real page would ever hit.
+  TextDecoder,
   document: {
     readyState: "complete",
     querySelector: () => null,

@@ -4,16 +4,38 @@
  */
 "use strict";
 (() => {
-  // node_modules/@nasdigitaluk/withnate-tool-core/dist/sniff.js
-  var startsWith = (bytes, sig, offset = 0) => {
-    if (bytes.length < offset + sig.length)
+  // node_modules/@nasdigitaluk/withnate-tool-core/dist/bytes.js
+  var u8 = (b, i) => {
+    const v = b[i];
+    if (v === void 0)
+      throw new RangeError(`byte ${i} is past the end of the buffer`);
+    return v;
+  };
+  var be16 = (b, i) => u8(b, i) << 8 | u8(b, i + 1);
+  var le16 = (b, i) => u8(b, i) | u8(b, i + 1) << 8;
+  var le24 = (b, i) => u8(b, i) | u8(b, i + 1) << 8 | u8(b, i + 2) << 16;
+  var be32 = (b, i) => (u8(b, i) << 24 | u8(b, i + 1) << 16 | u8(b, i + 2) << 8 | u8(b, i + 3)) >>> 0;
+  var le32 = (b, i) => (u8(b, i) | u8(b, i + 1) << 8 | u8(b, i + 2) << 16 | u8(b, i + 3) << 24) >>> 0;
+  var matchBytes = (b, sig, offset = 0) => {
+    if (b.length < offset + sig.length)
       return false;
     for (let i = 0; i < sig.length; i += 1) {
-      if (bytes[offset + i] !== sig[i])
+      if (b[offset + i] !== sig[i])
         return false;
     }
     return true;
   };
+  var matchAscii = (b, offset, s) => {
+    if (b.length < offset + s.length)
+      return false;
+    for (let i = 0; i < s.length; i += 1) {
+      if (b[offset + i] !== s.charCodeAt(i))
+        return false;
+    }
+    return true;
+  };
+
+  // node_modules/@nasdigitaluk/withnate-tool-core/dist/sniff.js
   var PNG_SIG = [137, 80, 78, 71, 13, 10, 26, 10];
   var JPEG_SIG = [255, 216, 255];
   var GIF87_SIG = [71, 73, 70, 56, 55, 97];
@@ -22,37 +44,214 @@
   var WEBP_SIG = [87, 69, 66, 80];
   var HEADER_BYTES = 64 * 1024;
   var sniffFormat = (bytes) => {
-    if (startsWith(bytes, PNG_SIG))
+    if (matchBytes(bytes, PNG_SIG))
       return "png";
-    if (startsWith(bytes, JPEG_SIG))
+    if (matchBytes(bytes, JPEG_SIG))
       return "jpeg";
-    if (startsWith(bytes, GIF87_SIG) || startsWith(bytes, GIF89_SIG))
+    if (matchBytes(bytes, GIF87_SIG) || matchBytes(bytes, GIF89_SIG))
       return "gif";
-    if (startsWith(bytes, RIFF_SIG) && startsWith(bytes, WEBP_SIG, 8))
+    if (matchBytes(bytes, RIFF_SIG) && matchBytes(bytes, WEBP_SIG, 8))
       return "webp";
     return null;
   };
 
-  // node_modules/@nasdigitaluk/withnate-tool-core/dist/dimensions.js
+  // node_modules/@nasdigitaluk/withnate-tool-core/dist/units.js
   var MM_PER_INCH = 25.4;
+  var CM_PER_INCH = MM_PER_INCH / 10;
   var MM_PER_METRE = 1e3;
-  var at = (b, i) => {
-    const v = b[i];
-    if (v === void 0)
-      throw new RangeError(`byte ${i} is past the end of the buffer`);
-    return v;
-  };
-  var be16 = (b, i) => at(b, i) << 8 | at(b, i + 1);
-  var le16 = (b, i) => at(b, i) | at(b, i + 1) << 8;
-  var le24 = (b, i) => at(b, i) | at(b, i + 1) << 8 | at(b, i + 2) << 16;
-  var be32 = (b, i) => (at(b, i) << 24 | at(b, i + 1) << 16 | at(b, i + 2) << 8 | at(b, i + 3)) >>> 0;
-  var asciiAt = (b, i, s) => {
-    for (let k = 0; k < s.length; k += 1) {
-      if (b[i + k] !== s.charCodeAt(k))
-        return false;
+
+  // node_modules/@nasdigitaluk/withnate-tool-core/dist/exif.js
+  var TYPE_SIZE = [0, 1, 1, 2, 4, 8, 1, 1, 2, 4, 8, 4, 8];
+  var MAX_ENTRIES = 4096;
+  var MAX_COMPONENTS = 1024;
+  var MAX_BLOCK_BYTES = 4 * 1024 * 1024;
+  var key = (ifd, tag) => `${ifd}:${tag}`;
+  var findTiffBlock = (bytes) => {
+    const format = sniffFormat(bytes);
+    if (format === "jpeg") {
+      let p = 2;
+      while (p + 4 <= bytes.length) {
+        if (u8(bytes, p) !== 255) {
+          p += 1;
+          continue;
+        }
+        const marker = u8(bytes, p + 1);
+        if (marker === 216 || marker >= 208 && marker <= 217 || marker === 1) {
+          p += 2;
+          continue;
+        }
+        const len = u8(bytes, p + 2) << 8 | u8(bytes, p + 3);
+        if (len < 2)
+          return null;
+        if (marker === 225 && matchAscii(bytes, p + 4, "Exif\0\0")) {
+          return bytes.subarray(p + 10, p + 2 + len);
+        }
+        if (marker === 218)
+          return null;
+        p = p + 2 + len;
+      }
+      return null;
     }
-    return true;
+    if (format === "png") {
+      let p = 8;
+      while (p + 8 <= bytes.length) {
+        const len = be32(bytes, p);
+        if (matchAscii(bytes, p + 4, "eXIf"))
+          return bytes.subarray(p + 8, p + 8 + len);
+        if (matchAscii(bytes, p + 4, "IDAT") || matchAscii(bytes, p + 4, "IEND"))
+          return null;
+        p += 12 + len;
+      }
+      return null;
+    }
+    if (format === "webp") {
+      let p = 12;
+      while (p + 8 <= bytes.length) {
+        const len = le32(bytes, p + 4);
+        if (matchAscii(bytes, p, "EXIF")) {
+          const start = matchAscii(bytes, p + 8, "Exif\0\0") ? p + 14 : p + 8;
+          return bytes.subarray(start, p + 8 + len);
+        }
+        p += 8 + len + len % 2;
+      }
+      return null;
+    }
+    return null;
   };
+  var reader = (b, little) => ({
+    u16: (i) => little ? u8(b, i) | u8(b, i + 1) << 8 : u8(b, i) << 8 | u8(b, i + 1),
+    u32: (i) => little ? le32(b, i) : be32(b, i),
+    i32: (i) => (little ? le32(b, i) : be32(b, i)) | 0,
+    byte: (i) => u8(b, i)
+  });
+  var TEXT = new TextDecoder("utf-8", { fatal: false });
+  var decodeAscii = (block, offset, count) => {
+    let end = offset;
+    const limit = offset + count;
+    while (end < limit && block[end] !== 0)
+      end += 1;
+    return TEXT.decode(block.subarray(offset, end)).replace(/[\u0000-\u001f\u007f]/g, "").trim();
+  };
+  var readValue = (r, block, type, count, offset) => {
+    if (type === 2)
+      return decodeAscii(block, offset, count);
+    const size = TYPE_SIZE[type];
+    const one = (i) => {
+      const at = offset + i * size;
+      switch (type) {
+        case 1:
+        case 7:
+          return r.byte(at);
+        case 3:
+          return r.u16(at);
+        case 4:
+          return r.u32(at);
+        case 9:
+          return r.i32(at);
+        case 5:
+          return { numerator: r.u32(at), denominator: r.u32(at + 4) };
+        case 10:
+          return { numerator: r.i32(at), denominator: r.i32(at + 4) };
+        default:
+          return 0;
+      }
+    };
+    if (count === 1)
+      return one(0);
+    const out = [];
+    for (let i = 0; i < count; i += 1)
+      out.push(one(i));
+    return out;
+  };
+  var IFD_EXIF_POINTER = 34665;
+  var IFD_GPS_POINTER = 34853;
+  var readIfd = (r, block, start, ifd, entries, seen, depth) => {
+    if (depth > 4 || seen.has(start) || start + 2 > block.length)
+      return 0;
+    seen.add(start);
+    const count = r.u16(start);
+    let p = start + 2;
+    for (let i = 0; i < count; i += 1, p += 12) {
+      if (p + 12 > block.length || entries.length >= MAX_ENTRIES)
+        break;
+      const tag = r.u16(p);
+      const type = r.u16(p + 2);
+      const n = r.u32(p + 4);
+      const size = TYPE_SIZE[type] ?? 0;
+      if (size === 0 || n === 0)
+        continue;
+      const bytesNeeded = size * n;
+      const valueAt = bytesNeeded <= 4 ? p + 8 : r.u32(p + 8);
+      if (valueAt + bytesNeeded > block.length)
+        continue;
+      if (tag === IFD_EXIF_POINTER || tag === IFD_GPS_POINTER) {
+        const target = bytesNeeded <= 4 ? r.u32(p + 8) : valueAt;
+        readIfd(r, block, target, tag === IFD_EXIF_POINTER ? "exif" : "gps", entries, seen, depth + 1);
+        continue;
+      }
+      if (type !== 2 && n > MAX_COMPONENTS)
+        continue;
+      try {
+        entries.push({ tag, ifd, type, count: n, value: readValue(r, block, type, n, valueAt) });
+      } catch {
+        continue;
+      }
+    }
+    return p + 4 <= block.length ? r.u32(p) : 0;
+  };
+  var parseExif = (bytes) => {
+    try {
+      const block = findTiffBlock(bytes);
+      if (!block || block.length < 8 || block.length > MAX_BLOCK_BYTES)
+        return null;
+      const order = block[0] === 73 && block[1] === 73 ? "little" : block[0] === 77 && block[1] === 77 ? "big" : null;
+      if (!order)
+        return null;
+      const r = reader(block, order === "little");
+      if (r.u16(2) !== 42)
+        return null;
+      const entries = [];
+      const seen = /* @__PURE__ */ new Set();
+      const next = readIfd(r, block, r.u32(4), "image", entries, seen, 0);
+      if (next > 0)
+        readIfd(r, block, next, "thumbnail", entries, seen, 1);
+      const byKey = /* @__PURE__ */ new Map();
+      for (const e of entries)
+        byKey.set(key(e.ifd, e.tag), e);
+      return { byteOrder: order, entries, byKey };
+    } catch {
+      return null;
+    }
+  };
+  var ratioValue = (v) => {
+    if (typeof v === "number")
+      return v;
+    if (typeof v === "object" && v !== null && "numerator" in v) {
+      return v.denominator === 0 ? null : v.numerator / v.denominator;
+    }
+    return null;
+  };
+  var exifNumber = (data, ifd, tag) => {
+    const e = data.byKey.get(key(ifd, tag));
+    return e ? ratioValue(e.value) : null;
+  };
+  var TAG_X_RESOLUTION = 282;
+  var TAG_Y_RESOLUTION = 283;
+  var TAG_RESOLUTION_UNIT = 296;
+  var exifResolution = (data) => {
+    const x = exifNumber(data, "image", TAG_X_RESOLUTION);
+    const y = exifNumber(data, "image", TAG_Y_RESOLUTION);
+    if (x === null || y === null || x <= 0 || y <= 0)
+      return null;
+    const unit = exifNumber(data, "image", TAG_RESOLUTION_UNIT) ?? 2;
+    if (unit === 2)
+      return { x, y };
+    if (unit === 3)
+      return { x: x * CM_PER_INCH, y: y * CM_PER_INCH };
+    return null;
+  };
+
+  // node_modules/@nasdigitaluk/withnate-tool-core/dist/dimensions.js
   var measurePng = (b) => {
     const width = be32(b, 16);
     const height = be32(b, 20);
@@ -61,15 +260,16 @@
     while (p + 8 <= b.length) {
       const len = be32(b, p);
       const type = p + 4;
-      if (asciiAt(b, type, "IDAT") || asciiAt(b, type, "IEND"))
+      if (matchAscii(b, type, "IDAT") || matchAscii(b, type, "IEND"))
         break;
-      if (asciiAt(b, type, "pHYs") && len === 9 && p + 8 + 9 <= b.length) {
+      if (matchAscii(b, type, "pHYs") && len === 9 && p + 8 + 9 <= b.length) {
         const d = p + 8;
-        const unit = at(b, d + 8);
-        if (unit === 1) {
+        const perMetreX = be32(b, d);
+        const perMetreY = be32(b, d + 4);
+        if (u8(b, d + 8) === 1 && perMetreX > 0 && perMetreY > 0) {
           density = {
-            x: be32(b, d) * MM_PER_INCH / MM_PER_METRE,
-            y: be32(b, d + 4) * MM_PER_INCH / MM_PER_METRE,
+            x: perMetreX * MM_PER_INCH / MM_PER_METRE,
+            y: perMetreY * MM_PER_INCH / MM_PER_METRE,
             source: "png-phys"
           };
         }
@@ -84,11 +284,11 @@
     let density = null;
     let p = 2;
     while (p + 4 <= b.length) {
-      if (at(b, p) !== 255) {
+      if (u8(b, p) !== 255) {
         p += 1;
         continue;
       }
-      const marker = at(b, p + 1);
+      const marker = u8(b, p + 1);
       if (marker === 255) {
         p += 1;
         continue;
@@ -104,14 +304,16 @@
       if (isSof(marker)) {
         return { format: "jpeg", height: be16(b, payload + 1), width: be16(b, payload + 3), density };
       }
-      if (marker === 224 && asciiAt(b, payload, "JFIF\0")) {
-        const units = at(b, payload + 7);
+      if (marker === 224 && matchAscii(b, payload, "JFIF\0")) {
+        const units = u8(b, payload + 7);
         const x = be16(b, payload + 8);
         const y = be16(b, payload + 10);
-        if (units === 1 && x > 0 && y > 0)
-          density = { x, y, source: "jfif" };
-        else if (units === 2 && x > 0 && y > 0) {
-          density = { x: x * MM_PER_INCH / 10, y: y * MM_PER_INCH / 10, source: "jfif" };
+        if (x > 0 && y > 0) {
+          if (units === 1)
+            density = { x, y, source: "jfif" };
+          else if (units === 2) {
+            density = { x: x * CM_PER_INCH, y: y * CM_PER_INCH, source: "jfif" };
+          }
         }
       }
       if (marker === 218)
@@ -125,10 +327,9 @@
     width: le16(b, 6),
     height: le16(b, 8),
     density: null
-    // GIF has no density field at all.
   });
   var measureWebp = (b) => {
-    const fourcc = String.fromCharCode(at(b, 12), at(b, 13), at(b, 14), at(b, 15));
+    const fourcc = String.fromCharCode(u8(b, 12), u8(b, 13), u8(b, 14), u8(b, 15));
     const data = 20;
     if (fourcc === "VP8X") {
       return {
@@ -147,9 +348,9 @@
       };
     }
     if (fourcc === "VP8L") {
-      if (at(b, data) !== 47)
+      if (u8(b, data) !== 47)
         throw new RangeError("VP8L signature byte missing");
-      const bits = at(b, data + 1) | at(b, data + 2) << 8 | at(b, data + 3) << 16 | at(b, data + 4) << 24;
+      const bits = u8(b, data + 1) | u8(b, data + 2) << 8 | u8(b, data + 3) << 16 | u8(b, data + 4) << 24;
       return {
         format: "webp",
         width: (bits & 16383) + 1,
@@ -159,14 +360,26 @@
     }
     throw new RangeError(`unrecognised WebP chunk "${fourcc}"`);
   };
+  var MEASURERS = {
+    png: measurePng,
+    jpeg: measureJpeg,
+    gif: measureGif,
+    webp: measureWebp
+  };
   var measureImage = (bytes) => {
     const format = sniffFormat(bytes);
     if (format === null)
       return null;
     try {
-      const m = format === "png" ? measurePng(bytes) : format === "jpeg" ? measureJpeg(bytes) : format === "gif" ? measureGif(bytes) : measureWebp(bytes);
+      const m = MEASURERS[format](bytes);
       if (!Number.isFinite(m.width) || !Number.isFinite(m.height) || m.width < 1 || m.height < 1) {
         return null;
+      }
+      if (m.density === null) {
+        const exif = parseExif(bytes);
+        const res = exif ? exifResolution(exif) : null;
+        if (res)
+          m.density = { x: res.x, y: res.y, source: "exif" };
       }
       return m;
     } catch {
@@ -247,10 +460,7 @@
   };
 
   // node_modules/@nasdigitaluk/withnate-tool-core/dist/mount.js
-  var getWn = () => {
-    const w = globalThis;
-    return w.WN ?? null;
-  };
+  var getWn = () => globalThis.WN ?? null;
   var mount = (selector, init) => {
     const run = () => {
       const root = document.querySelector(selector);
