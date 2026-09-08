@@ -1,14 +1,11 @@
-/**
- * Watermarker - entry point.
- *
- * Loaded on one page, does nothing on every other. The markup ships as real
- * HTML and this fills it in; nothing is uploaded, nothing is stored, and no
- * request leaves the page. The artwork is drawn on in the tab and handed
- * straight back as a download, which for a tool whose entire purpose is
- * protecting unpublished work is the only architecture that makes sense.
- */
 
-import { attachIntake, mount } from "@nasdigitaluk/withnate-tool-core";
+
+import {
+  attachIntake,
+  measureImage,
+  mount,
+  readHeaderBytes,
+} from "@nasdigitaluk/withnate-tool-core";
 import {
   FONTS,
   compose,
@@ -18,7 +15,17 @@ import {
   type ComposeOptions,
   type MarkStyle,
 } from "./compose.js";
-import { MIN_CENTRAL_WIDTH_PX, MIN_TILE_WIDTH_PX, TILE_WIDTH_FRACTION } from "./plan.js";
+import {
+  CENTRAL_WIDTH_FRACTION,
+  MAX_ARTWORK_PIXELS,
+  MAX_MARK_PIXELS,
+  MAX_TEXT_LENGTH,
+  MIN_CENTRAL_WIDTH_PX,
+  MIN_TILE_WIDTH_PX,
+  TILE_WIDTH_FRACTION,
+  isTooLarge,
+  megapixels,
+} from "./plan.js";
 
 interface State {
   artwork: { bitmap: ImageBitmap; name: string } | null;
@@ -50,6 +57,23 @@ mount("[data-wm]", ({ root }) => {
 
   let objectUrl: string | null = null;
 
+  const oversizedArtwork = (mp: number): string =>
+    `That image is ${mp} megapixels, and marking it would need several times that in memory — enough to bring this tab down. Save a copy at a smaller size and mark that.`;
+
+  const oversizedMark = (mp: number): string =>
+    `That logo is ${mp} megapixels. A watermark is drawn small whatever it starts at, so use a more ordinary export of it.`;
+
+  const refuseIfOversized = async (
+    file: File,
+    ceiling: number,
+    message: (mp: number) => string,
+  ): Promise<boolean> => {
+    const header = measureImage(await readHeaderBytes(file));
+    if (!header || !isTooLarge(header, ceiling)) return false;
+    showError(message(megapixels(header)));
+    return true;
+  };
+
   const clearOutput = (): void => {
     preview.replaceChildren();
     const count = el<HTMLElement>(root, "[data-wm-count]");
@@ -72,7 +96,7 @@ mount("[data-wm]", ({ root }) => {
         height: state.markImage.height,
       });
     }
-    const text = state.text.trim();
+    const text = state.text.trim().slice(0, MAX_TEXT_LENGTH);
     if (!text) return null;
     return markFromText(text, state.font);
   };
@@ -88,21 +112,21 @@ mount("[data-wm]", ({ root }) => {
 
     const size = { width: state.artwork.bitmap.width, height: state.artwork.bitmap.height };
 
-    // Refuse rather than produce something illegible. A mark below about a
-    // hundred pixels across is a smudge, and a smudge is not a deterrent - it
-    // is a defect the customer will ask about.
+    
+    
+    
     const projected =
       state.style === "tiled"
         ? Math.round(Math.min(size.width, size.height) * TILE_WIDTH_FRACTION)
-        : Math.round(size.width * 0.62);
+        : Math.round(size.width * CENTRAL_WIDTH_FRACTION);
     const floor = state.style === "tiled" ? MIN_TILE_WIDTH_PX : MIN_CENTRAL_WIDTH_PX;
     if (projected < floor) {
       showError(
         `This image is too small to mark legibly — the watermark would come out ${projected} pixels across. Use a larger version of the artwork.`,
       );
-      // Everything that described the previous result has to go with it.
-      // Leaving the caption behind puts "64 marks" directly under a message
-      // saying nothing could be marked.
+      
+      
+      
       clearOutput();
       return;
     }
@@ -116,10 +140,10 @@ mount("[data-wm]", ({ root }) => {
     img.alt = "Your artwork with the watermark applied";
     img.className = "wm-preview-img";
     void toPngBlob(result.canvas).then((blob) => {
-      // Held in the closure, not on the element. The element is recreated on
-      // every draw, so reading the previous URL off it always found nothing
-      // and every redraw leaked a full-size PNG - which on a 12 megapixel
-      // photo is tens of megabytes a slider drag.
+      
+      
+      
+      
       const url = URL.createObjectURL(blob);
       if (objectUrl) URL.revokeObjectURL(objectUrl);
       objectUrl = url;
@@ -144,35 +168,39 @@ mount("[data-wm]", ({ root }) => {
     preview.replaceChildren(img);
   };
 
-  // ------------------------------------------------------------- the artwork
+  
 
   attachIntake(intake, {
     onReject: showError,
     onFile: (file) => {
       clearError();
-      void createImageBitmap(file)
-        .then((bitmap) => {
-          state.artwork?.bitmap.close();
-          state.artwork = { bitmap, name: file.name };
-          if (controls) controls.hidden = false;
-          draw();
-        })
-        .catch(() =>
-          showError(
-            "That file could not be opened as an image. PNG, JPEG, GIF and WebP all work; a HEIC from an iPhone needs exporting as JPEG first.",
-          ),
-        );
+      void (async () => {
+        if (await refuseIfOversized(file, MAX_ARTWORK_PIXELS, oversizedArtwork)) return;
+        const bitmap = await createImageBitmap(file);
+        state.artwork?.bitmap.close();
+        state.artwork = { bitmap, name: file.name };
+        if (controls) controls.hidden = false;
+        draw();
+      })().catch(() =>
+        showError(
+          "That file could not be opened as an image. PNG, JPEG, GIF and WebP all work; a HEIC from an iPhone needs exporting as JPEG first.",
+        ),
+      );
     },
   });
 
-  // ---------------------------------------------------------------- controls
+  
 
   const textInput = el<HTMLInputElement>(root, "[data-wm-text]");
   if (textInput) {
+    
+    
+    
+    textInput.maxLength = MAX_TEXT_LENGTH;
     textInput.value = state.text;
     textInput.addEventListener("input", () => {
       state.text = textInput.value;
-      state.markImage = null; // typing replaces an uploaded logo
+      state.markImage = null; 
       draw();
     });
   }
@@ -197,13 +225,15 @@ mount("[data-wm]", ({ root }) => {
   markInput?.addEventListener("change", () => {
     const file = markInput.files?.[0];
     if (!file) return;
-    void createImageBitmap(file)
-      .then((bitmap) => {
-        state.markImage?.close();
-        state.markImage = bitmap;
-        draw();
-      })
-      .catch(() => showError("That logo could not be opened. A PNG with transparency works best."));
+    void (async () => {
+      if (await refuseIfOversized(file, MAX_MARK_PIXELS, oversizedMark)) return;
+      const bitmap = await createImageBitmap(file);
+      state.markImage?.close();
+      state.markImage = bitmap;
+      draw();
+    })().catch(() =>
+      showError("That logo could not be opened. A PNG with transparency works best."),
+    );
   });
 
   for (const b of Array.from(root.querySelectorAll<HTMLButtonElement>("[data-wm-style]"))) {

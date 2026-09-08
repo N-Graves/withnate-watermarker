@@ -4,13 +4,29 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Watermarker — demo</title>
-    <!--
-      Development harness AND the integration contract. The markup inside
-      [data-wm] is what the site's page module needs to emit.
-      demo.css only stands in for the site's own classes; it is not shipped.
-    -->
+
     <link rel="stylesheet" href="demo.css" />
     <link rel="stylesheet" href="../dist/watermarker.css" />
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "WebApplication",
+        "name": "Image watermarker",
+        "applicationCategory": "MultimediaApplication",
+        "operatingSystem": "Any modern browser",
+        "browserRequirements": "Requires JavaScript",
+        "isAccessibleForFree": true,
+        "offers": { "@type": "Offer", "price": "0", "priceCurrency": "GBP" },
+        "featureList": [
+          "Tiled diagonal watermark spaced to survive a crop",
+          "One large mark across the middle",
+          "Your own text in a system font, or your own logo",
+          "Light or dark ink chosen per mark from what it covers",
+          "Downloads as a lossless PNG"
+        ],
+        "permissions": "None. The artwork is marked in the browser and never uploaded."
+      }
+    </script>
   </head>
   <body>
     <main class="wrap">

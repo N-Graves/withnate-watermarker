@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { LUMA_THRESHOLD, patchMeanLuma } from "../src/plan.js";
 
-/** An w x h RGBA buffer where every pixel is one grey, fully opaque. */
 const grey = (w: number, h: number, v: number): Uint8ClampedArray => {
   const out = new Uint8ClampedArray(w * h * 4);
   for (let i = 0; i < w * h; i += 1) {
@@ -13,7 +12,6 @@ const grey = (w: number, h: number, v: number): Uint8ClampedArray => {
   return out;
 };
 
-/** Left half dark, right half bright. */
 const split = (w: number, h: number, left: number, right: number): Uint8ClampedArray => {
   const out = grey(w, h, left);
   for (let y = 0; y < h; y += 1) {
@@ -35,9 +33,7 @@ describe("patchMeanLuma", () => {
   });
 
   it("clamps a rectangle that overruns the edge", () => {
-    // The lattice deliberately overruns every edge, so a mark half off the top
-    // has only half a patch to measure. Reading past the buffer would wrap
-    // into the next row and quietly average the wrong pixels.
+
     const data = grey(50, 50, 100);
     expect(patchMeanLuma(data, 50, 50, { x: -30, y: -30, width: 40, height: 40 })).toBeCloseTo(100, 4);
     expect(patchMeanLuma(data, 50, 50, { x: 40, y: 40, width: 40, height: 40 })).toBeCloseTo(100, 4);
@@ -51,8 +47,7 @@ describe("patchMeanLuma", () => {
   });
 
   it("ignores fully transparent pixels", () => {
-    // A mark over a transparent corner would otherwise measure the colour of
-    // nothing at all and choose its ink from it.
+
     const data = grey(10, 10, 255);
     for (let i = 0; i < 50; i += 1) data[i * 4 + 3] = 0;
     for (let i = 50; i < 100; i += 1) {

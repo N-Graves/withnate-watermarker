@@ -1,9 +1,3 @@
-/*
- * Watermarker styles. Namespaced .wm- so this drops into the site without
- * touching anything already there, and deliberately does not define .btn,
- * .glass, .sw or .vh - those belong to the site's stylesheet.
- */
-
 .wm-intake {
   border: 2px dashed var(--line, rgba(51, 23, 11, 0.22));
   border-radius: 16px;
@@ -88,8 +82,6 @@
   display: none;
 }
 
-/* A watermark is judged by looking at it, so the preview is the real output
-   scaled down rather than a re-render at display size. */
 .wm-preview-img {
   display: block;
   max-width: 100%;

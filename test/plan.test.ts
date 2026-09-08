@@ -24,7 +24,7 @@ describe("rotatedBounds", () => {
   });
 
   it("matches the hand calculation at thirty degrees", () => {
-    // 100·cos30 + 40·sin30 = 86.603 + 20 ; 100·sin30 + 40·cos30 = 50 + 34.641
+
     const b = rotatedBounds(100, 40, 30);
     expect(b.width).toBeCloseTo(106.603, 3);
     expect(b.height).toBeCloseTo(84.641, 3);
@@ -37,9 +37,7 @@ describe("rotatedBounds", () => {
 
 describe("planTiles", () => {
   it("sizes the mark from the SHORT edge, not the width", () => {
-    // The property that makes the geometry aspect-invariant. Sized from the
-    // width, a 3360x840 shop banner would get a mark four times too big for
-    // its height and read as a stripe across the middle.
+
     for (const [w, h] of [[1000, 1000], [3360, 840], [840, 3360], [2000, 1500]] as const) {
       const plan = planTiles({ width: w, height: h }, 4);
       expect(plan.markWidth).toBe(Math.round(Math.min(w, h) * TILE_WIDTH_FRACTION));
@@ -47,17 +45,14 @@ describe("planTiles", () => {
   });
 
   it("keeps the mark count roughly constant as resolution rises", () => {
-    // A 4096px export should carry the same marks as the 1024px master, just
-    // bigger. Sizing in pixels rather than fractions would give it sixteen
-    // times as many and veil the picture.
+
     const small = planTiles({ width: 1024, height: 1024 }, 4).placements.length;
     const large = planTiles({ width: 4096, height: 4096 }, 4).placements.length;
     expect(Math.abs(large - small)).toBeLessThanOrEqual(2);
   });
 
   it("overruns every edge instead of respecting the margins", () => {
-    // A lattice that stops at the border leaves a clean unmarked frame, and
-    // that frame is the first thing anybody crops to.
+
     const image = { width: 1200, height: 900 };
     const plan = planTiles(image, 4);
     expect(plan.placements.some((p) => p.x < 0)).toBe(true);
@@ -75,7 +70,7 @@ describe("planTiles", () => {
   });
 
   it("spaces on the ROTATED bounding box, not the unrotated mark", () => {
-    // Spacing on the flat width would let neighbours overlap once turned.
+
     const plan = planTiles({ width: 2000, height: 2000 }, 4);
     expect(plan.pitchX).toBeGreaterThanOrEqual(plan.boundsWidth);
     expect(plan.pitchY).toBeGreaterThanOrEqual(plan.boundsHeight);
@@ -101,7 +96,7 @@ describe("planCentral", () => {
   });
 
   it("caps against the height on a tall crop rather than overrunning it", () => {
-    // A 1:1 mark on a narrow portrait would otherwise be taller than the frame.
+
     const image = { width: 900, height: 2600 };
     const p = planCentral(image, 1);
     expect(p.markHeight).toBeLessThanOrEqual(image.height * CENTRAL_MAX_HEIGHT_FRACTION + 1);
@@ -133,10 +128,7 @@ describe("pickInk", () => {
   });
 
   it("does NOT flip between the two tiles that caused the checkerboard", () => {
-    // The real incident this deadband exists for: on a framed-bedroom mockup,
-    // neighbouring tiles measured 122 and 132 against a threshold of 128 and
-    // flipped black to white between them. Both sit inside the band, so both
-    // now follow the whole image and match.
+
     const darkImage = 90;
     const brightImage = 190;
     expect(pickInk(122, darkImage)).toBe(pickInk(132, darkImage));
@@ -144,10 +136,7 @@ describe("pickInk", () => {
   });
 
   it("follows the whole image anywhere strictly inside the band", () => {
-    // Strictly inside: the band's own edges are decisive, not ambiguous. The
-    // comparisons are >= and <=, so a patch sitting exactly on 104 or 152 has
-    // reached the threshold and picks its own ink. The edge test below pins
-    // that; this one covers the interior.
+
     for (let patch = LUMA_THRESHOLD - LUMA_HYSTERESIS + 1; patch < LUMA_THRESHOLD + LUMA_HYSTERESIS; patch += 1) {
       expect(pickInk(patch, 60)).toBe("light");
       expect(pickInk(patch, 200)).toBe("dark");
@@ -155,8 +144,7 @@ describe("pickInk", () => {
   });
 
   it("still decides per tile once a patch is decisively one or the other", () => {
-    // The other half of the trade. One ink for the whole image is coherent and
-    // loses every mark crossing a bright subject on a dark ground.
+
     expect(pickInk(250, 40)).toBe("dark");
     expect(pickInk(5, 220)).toBe("light");
   });
@@ -176,8 +164,7 @@ describe("luma", () => {
   });
 
   it("ignores fully transparent pixels when averaging", () => {
-    // A mark landing on a transparent corner would otherwise measure the
-    // colour of nothing and pick its ink from it.
+
     const rgba = new Uint8ClampedArray([255, 255, 255, 0, 0, 0, 0, 255]);
     expect(meanLuma(rgba)).toBeCloseTo(0, 6);
   });

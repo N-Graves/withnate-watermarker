@@ -1,14 +1,3 @@
-/**
- * Smoke: prove the built artefact is what the site can actually accept.
- *
- * The MCP servers in this project have a smoke tier that speaks real stdio to
- * the built binary rather than testing the source. This is the browser
- * equivalent: it reads the bundle that would be copied into the site and
- * checks the properties the site enforces, several of which fail silently at
- * runtime rather than loudly at build time. A unit test cannot catch any of
- * them, because they are properties of the bundle, not of the code.
- */
-
 import { readFile } from "node:fs/promises";
 import { createContext, runInContext } from "node:vm";
 
@@ -39,10 +28,7 @@ check(!/\brequire\s*\(/.test(js), "has no CommonJS require");
 check(js.length <= JS_CEILING, `is under ${JS_CEILING} bytes`, `${js.length}`);
 
 console.log("the site's hard rules");
-// The site refuses third-party requests of any kind - its own check script
-// fails the build on a Google Fonts URL - and its privacy policy says outright
-// that nothing is contacted and nothing is kept. Both are checked against the
-// code rather than the other way round, so the code has to be true.
+
 const network = ["fetch(", "XMLHttpRequest", "WebSocket", "sendBeacon", "EventSource"];
 for (const api of network) {
   check(!js.includes(api), `makes no network call (${api})`);
@@ -51,13 +37,12 @@ const storage = ["localStorage", "sessionStorage", "indexedDB", "document.cookie
 for (const api of storage) {
   check(!js.includes(api), `writes no storage (${api})`);
 }
-const body = js.slice(js.indexOf("*/") + 2); // the banner legitimately carries the repo URL
+const body = js.slice(js.indexOf("*/") + 2);
 check(!/https?:\/\//.test(body), "references no external URL outside the banner");
 check(!/\bon[a-z]+\s*=\s*["']/.test(js), "emits no inline event handler attribute");
 
 console.log("silent bail");
-// A tool script is loaded on one page and must do nothing on every other. If
-// this throws, every other page on the site gets an error in the console.
+
 const calls = [];
 const sandbox = {
   console,
@@ -87,9 +72,7 @@ check(
 
 console.log("stylesheet");
 check(css.length <= CSS_CEILING, `is under ${CSS_CEILING} bytes`, `${css.length}`);
-// Redefining a site class here would mean two sources of truth for it, decided
-// by load order - which is exactly how a modal's gap silently changed by 4px
-// elsewhere in this project.
+
 const selectors = css.match(/^\s*\.[a-zA-Z][\w-]*/gm) ?? [];
 const foreign = [...new Set(selectors.map((s) => s.trim()))].filter((s) => !s.startsWith(".wm"));
 check(foreign.length === 0, "defines only .wm- classes", foreign.join(" "));

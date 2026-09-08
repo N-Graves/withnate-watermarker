@@ -1,17 +1,3 @@
-/**
- * The canvas work: build a mark, lay it over the picture, hand back a file.
- *
- * The decisions all live in plan.ts as pure functions. This is the adapter
- * that turns them into pixels.
- *
- * ⚠️ One trap carried over from the Python this is ported from, which does NOT
- * apply here and is worth recording so nobody reintroduces the workaround.
- * There, `paste(tile, box, tile)` on an RGBA destination SQUARES the alpha - a
- * mark at 0.15 lands at 0.022 and is invisible. Canvas does not do that:
- * `globalAlpha` multiplies once against the source alpha, which is the correct
- * behaviour, so the opacity here is the opacity you get.
- */
-
 import {
   meanLuma,
   patchMeanLuma,
@@ -27,7 +13,7 @@ export type MarkStyle = "tiled" | "central";
 
 export interface ComposeOptions {
   style: MarkStyle;
-  /** Tiled marks are faint because there are many; a single mark carries it alone. */
+
   opacity?: number;
   widthFraction?: number;
   angle?: number;
@@ -49,31 +35,18 @@ const canvas2d = (
   return ctx;
 };
 
-// ------------------------------------------------------------- building a mark
-
 export const FONTS: ReadonlyArray<{ id: string; label: string; stack: string }> = [
   { id: "sans", label: "Bold sans", stack: '"Helvetica Neue", Helvetica, Arial, sans-serif' },
   { id: "serif", label: "Bold serif", stack: 'Georgia, "Times New Roman", serif' },
   { id: "mono", label: "Bold mono", stack: '"SF Mono", Consolas, "Courier New", monospace' },
 ];
 
-/**
- * Fonts are system stacks, never a webfont. The site refuses third-party
- * requests of any kind - its own build check fails on a Google Fonts URL - and
- * a watermark tool that phones out for a typeface would break that for the one
- * thing on the page that is meant to be private.
- */
 export const markFromText = (text: string, fontStack: string): HTMLCanvasElement => {
-  const SIZE = 256; // Rendered large, scaled down at draw time, so it stays crisp.
+  const SIZE = 256;
   const measure = canvas2d(8, 8);
   measure.font = `bold ${SIZE}px ${fontStack}`;
   const m = measure.measureText(text);
-  // Actual ascent and descent rather than the em box, so an all-caps mark is
-  // not padded out by the space a lowercase g would have taken.
-  //
-  // The mark is always the visitor's own - text they type, or a logo they
-  // upload. Nothing is bundled with this tool and there is no preset list, so
-  // no brand's mark can be applied to somebody else's work through it.
+
   const ascent = m.actualBoundingBoxAscent || SIZE * 0.8;
   const descent = m.actualBoundingBoxDescent || SIZE * 0.2;
   const w = Math.max(1, Math.ceil(m.width));
@@ -87,13 +60,6 @@ export const markFromText = (text: string, fontStack: string): HTMLCanvasElement
   return ctx.canvas;
 };
 
-/**
- * Trim an uploaded mark to its actual ink.
- *
- * Logos routinely ship with a third of the file as transparent padding, and
- * without this the mark is scaled by its padded size and comes out visibly
- * smaller than asked for.
- */
 export const trimToInk = (source: CanvasImageSource, size: Size): HTMLCanvasElement => {
   const ctx = canvas2d(size.width, size.height, { willReadFrequently: true });
   ctx.drawImage(source, 0, 0, size.width, size.height);
@@ -113,7 +79,7 @@ export const trimToInk = (source: CanvasImageSource, size: Size): HTMLCanvasElem
       }
     }
   }
-  // Fully transparent, or opaque to the edges: nothing to trim.
+
   if (maxX < 0) return ctx.canvas;
 
   const w = maxX - minX + 1;
@@ -125,14 +91,6 @@ export const trimToInk = (source: CanvasImageSource, size: Size): HTMLCanvasElem
   return out.canvas;
 };
 
-/**
- * Recolour a mark, keeping its alpha exactly.
- *
- * `source-in` paints the colour only where the mark already has ink, so the
- * shape and its antialiasing survive untouched. Recolouring by drawing the
- * text again in a different fill would work for text and not for an uploaded
- * logo, and two code paths for the same idea is how they drift.
- */
 export const tintMark = (mark: HTMLCanvasElement, colour: string): HTMLCanvasElement => {
   const ctx = canvas2d(mark.width, mark.height);
   ctx.drawImage(mark, 0, 0);
@@ -145,12 +103,10 @@ export const tintMark = (mark: HTMLCanvasElement, colour: string): HTMLCanvasEle
 const LIGHT = "#ffffff";
 const DARK = "#111111";
 
-// --------------------------------------------------------------- composition
-
 export interface ComposeResult {
   canvas: HTMLCanvasElement;
   marksDrawn: number;
-  /** How many marks took each ink, which is what makes the deadband visible. */
+
   inkCounts: Record<Ink, number>;
 }
 
@@ -160,10 +116,7 @@ export const compose = (
   mark: HTMLCanvasElement,
   opts: ComposeOptions,
 ): ComposeResult => {
-  // The sampling surface and the drawing surface are separate ON PURPOSE. Ink
-  // already laid down changes the brightness underneath the next mark, so
-  // measuring the canvas being drawn on makes every mark's colour depend on
-  // the ones before it.
+
   const sampler = canvas2d(size.width, size.height, { willReadFrequently: true });
   sampler.drawImage(source, 0, 0, size.width, size.height);
   const clean = sampler.getImageData(0, 0, size.width, size.height).data;
@@ -218,14 +171,6 @@ export const compose = (
   return { canvas: out.canvas, marksDrawn, inkCounts };
 };
 
-/**
- * PNG, always, whatever came in.
- *
- * A JPEG in and a JPEG out means a second generation of compression on the
- * whole picture in order to add a watermark, which is a real quality cost paid
- * for nothing. PNG is bigger and lossless, and this file exists to be posted
- * rather than archived.
- */
 export const toPngBlob = (canvas: HTMLCanvasElement): Promise<Blob> =>
   new Promise((resolve, reject) => {
     canvas.toBlob((b) => (b ? resolve(b) : reject(new Error("could not encode the image"))), "image/png");

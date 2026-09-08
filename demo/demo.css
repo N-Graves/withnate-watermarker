@@ -1,16 +1,3 @@
-/*
- * DEMO ONLY. Not shipped, not part of the deliverable.
- *
- * The tool reuses the site's existing classes - .btn, .fam, .glass, .eyebrow,
- * .lede, .sw, .vh, .wrap - rather than inventing its own, so that it inherits
- * the site's look and stays consistent when the design changes. That means on
- * a bare page it has nothing to inherit, so these are minimal stand-ins good
- * enough to develop and review against.
- *
- * Do not copy this file to the site. It already defines every one of these,
- * better, and a second definition would be a fight decided by load order.
- */
-
 :root {
   --surface: #fbf4e9;
   --surface-2: #f6ead8;

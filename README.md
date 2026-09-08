@@ -107,11 +107,45 @@ Plain IIFE, does nothing unless the page contains `data-wm`. Copy `dist/watermar
 
 The stylesheet defines only `.wm-` classes, enforced by a smoke check.
 
+## Structured data
+
+`demo/index.html` carries a static JSON-LD `WebApplication` block. Verified against the site's own
+tooling rather than assumed: `scripts/check.mjs` fails a page with a second inline `<script>` but
+**explicitly exempts `type="application/ld+json"`**, and `scripts/seo.mjs` fails the build on a block
+that does not parse or carries no `@type`. No rating, no review count.
+
+## Security posture
+
+Nothing is uploaded, stored or transmitted, which for a tool whose entire purpose is protecting
+unpublished work is the only architecture that makes sense. What is left is memory.
+
+**This is the most allocation-hungry of these tools, and it now says no.** A single draw holds the
+sampler canvas, a copy of its pixels and the output canvas, then encodes a PNG of the whole thing —
+roughly four times width × height × 4 bytes of working set. At 50 megapixels that is already 800MB,
+and the opacity slider redraws on every input event. So:
+
+| Input | Ceiling | Why |
+|---|---|---|
+| Artwork | 50 megapixels | An A3 print master at 300dpi is 17; a 4× upscale off this project's own pipeline is 21. Far above anything this is for. |
+| Uploaded logo | 16 megapixels | A mark is small by nature, and it is additionally read back pixel by pixel to trim it to its ink. |
+| Watermark text | 64 characters | At 256px bold, unbounded text is an unbounded canvas width. Also set as the input's own `maxLength`, so the two numbers cannot disagree. |
+
+Each refusal says what was measured and what to do instead. The text ceiling is applied in
+`buildMark` as well as on the element, because the page's markup belongs to the site rather than to
+this script.
+
+On the DOM side: everything is `createElement` and `textContent`, and **no string from the file or
+the visitor reaches the page at all** — the watermark text goes to `fillText` on a canvas, never into
+markup, and the filename is only ever used for the download's suggested name.
+
+There are no bundled marks and no preset list. The mark is always the visitor's own text or their own
+upload, so nobody's brand can be applied to somebody else's work through this.
+
 ## Testing
 
 ```bash
 npm run lint    # tsc --noEmit
-npm test        # 28 tests
+npm test        # 35 tests
 npm run smoke   # 20 checks against the built bundle
 npm run demo    # serves demo/ on :4175
 ```

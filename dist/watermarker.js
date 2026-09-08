@@ -5,7 +5,174 @@
 "use strict";
 (() => {
   // node_modules/@nasdigitaluk/withnate-tool-core/dist/sniff.js
+  var startsWith = (bytes, sig, offset = 0) => {
+    if (bytes.length < offset + sig.length)
+      return false;
+    for (let i = 0; i < sig.length; i += 1) {
+      if (bytes[offset + i] !== sig[i])
+        return false;
+    }
+    return true;
+  };
+  var PNG_SIG = [137, 80, 78, 71, 13, 10, 26, 10];
+  var JPEG_SIG = [255, 216, 255];
+  var GIF87_SIG = [71, 73, 70, 56, 55, 97];
+  var GIF89_SIG = [71, 73, 70, 56, 57, 97];
+  var RIFF_SIG = [82, 73, 70, 70];
+  var WEBP_SIG = [87, 69, 66, 80];
   var HEADER_BYTES = 64 * 1024;
+  var sniffFormat = (bytes) => {
+    if (startsWith(bytes, PNG_SIG))
+      return "png";
+    if (startsWith(bytes, JPEG_SIG))
+      return "jpeg";
+    if (startsWith(bytes, GIF87_SIG) || startsWith(bytes, GIF89_SIG))
+      return "gif";
+    if (startsWith(bytes, RIFF_SIG) && startsWith(bytes, WEBP_SIG, 8))
+      return "webp";
+    return null;
+  };
+
+  // node_modules/@nasdigitaluk/withnate-tool-core/dist/dimensions.js
+  var MM_PER_INCH = 25.4;
+  var MM_PER_METRE = 1e3;
+  var at = (b, i) => {
+    const v = b[i];
+    if (v === void 0)
+      throw new RangeError(`byte ${i} is past the end of the buffer`);
+    return v;
+  };
+  var be16 = (b, i) => at(b, i) << 8 | at(b, i + 1);
+  var le16 = (b, i) => at(b, i) | at(b, i + 1) << 8;
+  var le24 = (b, i) => at(b, i) | at(b, i + 1) << 8 | at(b, i + 2) << 16;
+  var be32 = (b, i) => (at(b, i) << 24 | at(b, i + 1) << 16 | at(b, i + 2) << 8 | at(b, i + 3)) >>> 0;
+  var asciiAt = (b, i, s) => {
+    for (let k = 0; k < s.length; k += 1) {
+      if (b[i + k] !== s.charCodeAt(k))
+        return false;
+    }
+    return true;
+  };
+  var measurePng = (b) => {
+    const width = be32(b, 16);
+    const height = be32(b, 20);
+    let density = null;
+    let p = 8;
+    while (p + 8 <= b.length) {
+      const len = be32(b, p);
+      const type = p + 4;
+      if (asciiAt(b, type, "IDAT") || asciiAt(b, type, "IEND"))
+        break;
+      if (asciiAt(b, type, "pHYs") && len === 9 && p + 8 + 9 <= b.length) {
+        const d = p + 8;
+        const unit = at(b, d + 8);
+        if (unit === 1) {
+          density = {
+            x: be32(b, d) * MM_PER_INCH / MM_PER_METRE,
+            y: be32(b, d + 4) * MM_PER_INCH / MM_PER_METRE,
+            source: "png-phys"
+          };
+        }
+        break;
+      }
+      p += 12 + len;
+    }
+    return { format: "png", width, height, density };
+  };
+  var isSof = (m) => m >= 192 && m <= 195 || m >= 197 && m <= 199 || m >= 201 && m <= 203 || m >= 205 && m <= 207;
+  var measureJpeg = (b) => {
+    let density = null;
+    let p = 2;
+    while (p + 4 <= b.length) {
+      if (at(b, p) !== 255) {
+        p += 1;
+        continue;
+      }
+      const marker = at(b, p + 1);
+      if (marker === 255) {
+        p += 1;
+        continue;
+      }
+      if (marker === 216 || marker >= 208 && marker <= 217 || marker === 1) {
+        p += 2;
+        continue;
+      }
+      const len = be16(b, p + 2);
+      if (len < 2)
+        break;
+      const payload = p + 4;
+      if (isSof(marker)) {
+        return { format: "jpeg", height: be16(b, payload + 1), width: be16(b, payload + 3), density };
+      }
+      if (marker === 224 && asciiAt(b, payload, "JFIF\0")) {
+        const units = at(b, payload + 7);
+        const x = be16(b, payload + 8);
+        const y = be16(b, payload + 10);
+        if (units === 1 && x > 0 && y > 0)
+          density = { x, y, source: "jfif" };
+        else if (units === 2 && x > 0 && y > 0) {
+          density = { x: x * MM_PER_INCH / 10, y: y * MM_PER_INCH / 10, source: "jfif" };
+        }
+      }
+      if (marker === 218)
+        break;
+      p = payload + len - 2;
+    }
+    throw new RangeError("no start-of-frame segment found");
+  };
+  var measureGif = (b) => ({
+    format: "gif",
+    width: le16(b, 6),
+    height: le16(b, 8),
+    density: null
+    // GIF has no density field at all.
+  });
+  var measureWebp = (b) => {
+    const fourcc = String.fromCharCode(at(b, 12), at(b, 13), at(b, 14), at(b, 15));
+    const data = 20;
+    if (fourcc === "VP8X") {
+      return {
+        format: "webp",
+        width: le24(b, data + 4) + 1,
+        height: le24(b, data + 7) + 1,
+        density: null
+      };
+    }
+    if (fourcc === "VP8 ") {
+      return {
+        format: "webp",
+        width: le16(b, data + 6) & 16383,
+        height: le16(b, data + 8) & 16383,
+        density: null
+      };
+    }
+    if (fourcc === "VP8L") {
+      if (at(b, data) !== 47)
+        throw new RangeError("VP8L signature byte missing");
+      const bits = at(b, data + 1) | at(b, data + 2) << 8 | at(b, data + 3) << 16 | at(b, data + 4) << 24;
+      return {
+        format: "webp",
+        width: (bits & 16383) + 1,
+        height: (bits >>> 14 & 16383) + 1,
+        density: null
+      };
+    }
+    throw new RangeError(`unrecognised WebP chunk "${fourcc}"`);
+  };
+  var measureImage = (bytes) => {
+    const format = sniffFormat(bytes);
+    if (format === null)
+      return null;
+    try {
+      const m = format === "png" ? measurePng(bytes) : format === "jpeg" ? measureJpeg(bytes) : format === "gif" ? measureGif(bytes) : measureWebp(bytes);
+      if (!Number.isFinite(m.width) || !Number.isFinite(m.height) || m.width < 1 || m.height < 1) {
+        return null;
+      }
+      return m;
+    } catch {
+      return null;
+    }
+  };
 
   // node_modules/@nasdigitaluk/withnate-tool-core/dist/intake.js
   var DEFAULT_DRAGGING_CLASS = "is-dragging";
@@ -74,6 +241,10 @@
       root.classList.remove(draggingClass);
     };
   };
+  var readHeaderBytes = async (file, n = HEADER_BYTES) => {
+    const buf = await file.slice(0, n).arrayBuffer();
+    return new Uint8Array(buf);
+  };
 
   // node_modules/@nasdigitaluk/withnate-tool-core/dist/mount.js
   var getWn = () => {
@@ -102,6 +273,11 @@
   var ROW_STAGGER = 0.5;
   var ANGLE_DEGREES = 30;
   var MIN_TILE_WIDTH_PX = 96;
+  var MAX_ARTWORK_PIXELS = 5e7;
+  var MAX_MARK_PIXELS = 16e6;
+  var MAX_TEXT_LENGTH = 64;
+  var isTooLarge = (size, ceiling) => size.width * size.height > ceiling;
+  var megapixels = (size) => Math.round(size.width * size.height / 1e5) / 10;
   var rotatedBounds = (width, height, degrees) => {
     const r = degrees * Math.PI / 180;
     const c = Math.abs(Math.cos(r));
@@ -337,6 +513,14 @@
       opacity: null
     };
     let objectUrl = null;
+    const oversizedArtwork = (mp) => `That image is ${mp} megapixels, and marking it would need several times that in memory \u2014 enough to bring this tab down. Save a copy at a smaller size and mark that.`;
+    const oversizedMark = (mp) => `That logo is ${mp} megapixels. A watermark is drawn small whatever it starts at, so use a more ordinary export of it.`;
+    const refuseIfOversized = async (file, ceiling, message) => {
+      const header = measureImage(await readHeaderBytes(file));
+      if (!header || !isTooLarge(header, ceiling)) return false;
+      showError(message(megapixels(header)));
+      return true;
+    };
     const clearOutput = () => {
       preview.replaceChildren();
       const count = el(root, "[data-wm-count]");
@@ -357,7 +541,7 @@
           height: state.markImage.height
         });
       }
-      const text = state.text.trim();
+      const text = state.text.trim().slice(0, MAX_TEXT_LENGTH);
       if (!text) return null;
       return markFromText(text, state.font);
     };
@@ -370,7 +554,7 @@
         return;
       }
       const size = { width: state.artwork.bitmap.width, height: state.artwork.bitmap.height };
-      const projected = state.style === "tiled" ? Math.round(Math.min(size.width, size.height) * TILE_WIDTH_FRACTION) : Math.round(size.width * 0.62);
+      const projected = state.style === "tiled" ? Math.round(Math.min(size.width, size.height) * TILE_WIDTH_FRACTION) : Math.round(size.width * CENTRAL_WIDTH_FRACTION);
       const floor = state.style === "tiled" ? MIN_TILE_WIDTH_PX : MIN_CENTRAL_WIDTH_PX;
       if (projected < floor) {
         showError(
@@ -409,12 +593,14 @@
       onReject: showError,
       onFile: (file) => {
         clearError();
-        void createImageBitmap(file).then((bitmap) => {
+        void (async () => {
+          if (await refuseIfOversized(file, MAX_ARTWORK_PIXELS, oversizedArtwork)) return;
+          const bitmap = await createImageBitmap(file);
           state.artwork?.bitmap.close();
           state.artwork = { bitmap, name: file.name };
           if (controls) controls.hidden = false;
           draw();
-        }).catch(
+        })().catch(
           () => showError(
             "That file could not be opened as an image. PNG, JPEG, GIF and WebP all work; a HEIC from an iPhone needs exporting as JPEG first."
           )
@@ -423,6 +609,7 @@
     });
     const textInput = el(root, "[data-wm-text]");
     if (textInput) {
+      textInput.maxLength = MAX_TEXT_LENGTH;
       textInput.value = state.text;
       textInput.addEventListener("input", () => {
         state.text = textInput.value;
@@ -449,11 +636,15 @@
     markInput?.addEventListener("change", () => {
       const file = markInput.files?.[0];
       if (!file) return;
-      void createImageBitmap(file).then((bitmap) => {
+      void (async () => {
+        if (await refuseIfOversized(file, MAX_MARK_PIXELS, oversizedMark)) return;
+        const bitmap = await createImageBitmap(file);
         state.markImage?.close();
         state.markImage = bitmap;
         draw();
-      }).catch(() => showError("That logo could not be opened. A PNG with transparency works best."));
+      })().catch(
+        () => showError("That logo could not be opened. A PNG with transparency works best.")
+      );
     });
     for (const b of Array.from(root.querySelectorAll("[data-wm-style]"))) {
       b.addEventListener("click", () => {
