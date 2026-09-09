@@ -59,6 +59,20 @@
   var MM_PER_INCH = 25.4;
   var CM_PER_INCH = MM_PER_INCH / 10;
   var MM_PER_METRE = 1e3;
+  var roundTo = (value, dp) => {
+    const f = 10 ** dp;
+    return Math.round(value * f) / f;
+  };
+  var formatBytes = (n) => {
+    if (!Number.isFinite(n) || n < 0)
+      return "\u2014";
+    if (n < 1e3)
+      return `${Math.round(n)} B`;
+    const kb = Math.round(n / 1e3);
+    if (kb < 1e3)
+      return `${kb} KB`;
+    return `${roundTo(n / 1e6, 1)} MB`;
+  };
 
   // node_modules/@nasdigitaluk/withnate-tool-core/dist/exif.js
   var TYPE_SIZE = [0, 1, 1, 2, 4, 8, 1, 1, 2, 4, 8, 4, 8];
@@ -389,7 +403,6 @@
 
   // node_modules/@nasdigitaluk/withnate-tool-core/dist/intake.js
   var DEFAULT_DRAGGING_CLASS = "is-dragging";
-  var humanBytes = (n) => n >= 1024 * 1024 ? `${Math.round(n / (1024 * 1024))}MB` : `${Math.round(n / 1024)}KB`;
   var attachIntake = (root, opts) => {
     const draggingClass = opts.draggingClass ?? DEFAULT_DRAGGING_CLASS;
     const input = root.querySelector('input[type="file"]');
@@ -397,7 +410,7 @@
       if (!file)
         return;
       if (opts.maxBytes && file.size > opts.maxBytes) {
-        opts.onReject?.(`That file is ${humanBytes(file.size)}. The limit here is ${humanBytes(opts.maxBytes)}.`);
+        opts.onReject?.(`That file is ${formatBytes(file.size)}. The limit here is ${formatBytes(opts.maxBytes)}.`);
         return;
       }
       if (file.size === 0) {
@@ -590,10 +603,10 @@
   // src/compose.ts
   var TILED_OPACITY = 0.15;
   var CENTRAL_OPACITY = 0.28;
-  var canvas2d = (w, h, opts) => {
+  var canvas2d = (w, h2, opts) => {
     const c = document.createElement("canvas");
     c.width = Math.max(1, Math.round(w));
-    c.height = Math.max(1, Math.round(h));
+    c.height = Math.max(1, Math.round(h2));
     const ctx = c.getContext("2d", opts);
     if (!ctx) throw new Error("this browser would not give us a 2d canvas");
     return ctx;
@@ -611,8 +624,8 @@
     const ascent = m.actualBoundingBoxAscent || SIZE * 0.8;
     const descent = m.actualBoundingBoxDescent || SIZE * 0.2;
     const w = Math.max(1, Math.ceil(m.width));
-    const h = Math.max(1, Math.ceil(ascent + descent));
-    const ctx = canvas2d(w, h);
+    const h2 = Math.max(1, Math.ceil(ascent + descent));
+    const ctx = canvas2d(w, h2);
     ctx.font = `bold ${SIZE}px ${fontStack}`;
     ctx.fillStyle = "#fff";
     ctx.textBaseline = "alphabetic";
@@ -639,10 +652,10 @@
     }
     if (maxX < 0) return ctx.canvas;
     const w = maxX - minX + 1;
-    const h = maxY - minY + 1;
-    if (w === size.width && h === size.height) return ctx.canvas;
-    const out = canvas2d(w, h);
-    out.drawImage(ctx.canvas, minX, minY, w, h, 0, 0, w, h);
+    const h2 = maxY - minY + 1;
+    if (w === size.width && h2 === size.height) return ctx.canvas;
+    const out = canvas2d(w, h2);
+    out.drawImage(ctx.canvas, minX, minY, w, h2, 0, 0, w, h2);
     return out.canvas;
   };
   var tintMark = (mark, colour) => {
@@ -668,8 +681,8 @@
     const aspect = mark.width / mark.height;
     const inkCounts = { light: 0, dark: 0 };
     let marksDrawn = 0;
-    const place = (x, y, w, h, angle) => {
-      const bounds = rotatedBounds(w, h, angle);
+    const place = (x, y, w, h2, angle) => {
+      const bounds = rotatedBounds(w, h2, angle);
       const patch = patchMeanLuma(clean, size.width, size.height, {
         x,
         y,
@@ -681,7 +694,7 @@
       out.save();
       out.translate(x + bounds.width / 2, y + bounds.height / 2);
       out.rotate(angle * Math.PI / 180);
-      out.drawImage(ink === "light" ? light : dark, -w / 2, -h / 2, w, h);
+      out.drawImage(ink === "light" ? light : dark, -w / 2, -h2 / 2, w, h2);
       out.restore();
       marksDrawn += 1;
     };
